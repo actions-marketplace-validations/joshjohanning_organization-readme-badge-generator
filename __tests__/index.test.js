@@ -1,6 +1,20 @@
 import { jest } from '@jest/globals';
-import core from '@actions/core';
-import {
+
+// Mock @actions/core before importing the module
+const mockCore = {
+  info: jest.fn(),
+  debug: jest.fn(),
+  error: jest.fn(),
+  setOutput: jest.fn(),
+  getInput: jest.fn().mockReturnValue(''),
+  setFailed: jest.fn(),
+  warning: jest.fn()
+};
+
+jest.unstable_mockModule('@actions/core', () => mockCore);
+
+// Import after mocking
+const {
   generateBadgeMarkdown,
   getRepositoryCount,
   getRepositories,
@@ -11,14 +25,10 @@ import {
   createGraphqlClient,
   initializeConfig,
   run
-} from '../src/index.js';
+} = await import('../src/index.js');
 
-// Mock @actions/core
-jest.spyOn(core, 'info').mockImplementation(() => {});
-jest.spyOn(core, 'debug').mockImplementation(() => {});
-jest.spyOn(core, 'error').mockImplementation(() => {});
-jest.spyOn(core, 'setOutput').mockImplementation(() => {});
-jest.spyOn(core, 'getInput').mockImplementation(() => '');
+// Export mockCore for test assertions
+const core = mockCore;
 
 describe('generateBadgeMarkdown', () => {
   it('should generate correct markdown badge with shields.io URL', () => {
@@ -774,6 +784,46 @@ describe('initializeConfig', () => {
     expect(config.graphqlClient).toBeDefined();
   });
 
+  it('should throw error when days is not a valid number', () => {
+    getInputSpy.mockImplementation(name => {
+      if (name === 'organization') return 'test-org';
+      if (name === 'token') return 'test-token';
+      if (name === 'days') return 'abc';
+      return '';
+    });
+    expect(() => initializeConfig()).toThrow(`Invalid 'days' input: must be a positive integer`);
+  });
+
+  it('should throw error when days is zero', () => {
+    getInputSpy.mockImplementation(name => {
+      if (name === 'organization') return 'test-org';
+      if (name === 'token') return 'test-token';
+      if (name === 'days') return '0';
+      return '';
+    });
+    expect(() => initializeConfig()).toThrow(`Invalid 'days' input: must be a positive integer`);
+  });
+
+  it('should throw error when days is negative', () => {
+    getInputSpy.mockImplementation(name => {
+      if (name === 'organization') return 'test-org';
+      if (name === 'token') return 'test-token';
+      if (name === 'days') return '-1';
+      return '';
+    });
+    expect(() => initializeConfig()).toThrow(`Invalid 'days' input: must be a positive integer`);
+  });
+
+  it('should throw error when days is a decimal', () => {
+    getInputSpy.mockImplementation(name => {
+      if (name === 'organization') return 'test-org';
+      if (name === 'token') return 'test-token';
+      if (name === 'days') return '10.5';
+      return '';
+    });
+    expect(() => initializeConfig()).toThrow(`Invalid 'days' input: must be a positive integer`);
+  });
+
   it('should use custom values when provided', () => {
     getInputSpy.mockImplementation(name => {
       if (name === 'organization') return 'custom-org';
@@ -789,7 +839,7 @@ describe('initializeConfig', () => {
 
     expect(config.organization).toBe('custom-org');
     expect(config.token).toBe('custom-token');
-    expect(config.days).toBe('60');
+    expect(config.days).toBe(60);
     expect(config.graphqlUrl).toBe('https://custom.github.com/graphql');
     expect(config.color).toBe('green');
     expect(config.labelColor).toBe('999');
